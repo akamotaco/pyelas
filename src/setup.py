@@ -4,9 +4,10 @@ import numpy
 import os
 
 (opt,) = get_config_vars('OPT')
-os.environ['OPT'] = " ".join(
-    flag for flag in opt.split() if flag != '-Wstrict-prototypes'
-)
+if opt is not None:
+    os.environ['OPT'] = " ".join(
+        flag for flag in opt.split() if flag != '-Wstrict-prototypes'
+    )
 
 setup(name="pyelas",
       version="0.1.0",
