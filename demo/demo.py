@@ -56,128 +56,101 @@ def fill_gap(disparity_map: np.ndarray, method: str = 'linear') -> np.ndarray:
             value_prev = value
     return d_map
 
-def point_cloud_from_disparity_map(disparity_map: np.ndarray, max_z: float = 1000.0) -> np.ndarray:
+def point_cloud_from_disparity_map(disparity_map: np.ndarray) -> np.ndarray: # px -> mm
     # fujifilm 3d w3 (https://asset.fujifilm.com/www/jp/files/2019-12/c46a5d7db9151ab73830c0b42870079d/ff_rd057_008_en.pdf)
     focal_length = 6.3 # 6.3 (mm)
     baseline_length = 75 # 75 (mm)
     horizontal_pixels = disparity_map.shape[1] #3648 # L-size
     sensor_pixel_mm = 6.17 # (mm) # CCD = 1/2.3 # inches  (6.17mm x 4.55mm) 
 
-    pixel_pitch = sensor_pixel_mm / horizontal_pixels
+    pixel_pitch = sensor_pixel_mm / horizontal_pixels # px -> mm
 
     Cx, Cy = disparity_map.shape[1]/2, disparity_map.shape[0]/2
 
-#region parallel setup
-    print('special case: parallel setup')
-    # https://stackoverflow.com/questions/50297459/how-to-compute-the-true-depth-given-a-disparity-map-of-rectified-images
-    height, width = disparity_map.shape
-    point_list = []
-    for y in range(height):
-        for x in range(width):
-            disparity = disparity_map[y, x] * pixel_pitch
-            if disparity == 0:
-                X = x
-                Y = y
-                Z = max_z
-            else:
-                X = baseline_length * (x-Cx) *  pixel_pitch / disparity
-                Y = baseline_length * (y-Cy) *  pixel_pitch
-                Z = (baseline_length * focal_length) / disparity
-                if Z > max_z:
-                    Z = max_z
-            point_list.append([X, Y, Z])
+    special_case = False
 
-    point_list = np.array([pnt for pnt in point_list if pnt[2] < max_z])
-    return point_list
+#region parallel setup
+    if special_case:
+        print('special case: parallel setup')
+        # https://stackoverflow.com/questions/50297459/how-to-compute-the-true-depth-given-a-disparity-map-of-rectified-images
+        height, width = disparity_map.shape
+        point_list = []
+        for y in range(height):
+            for x in range(width):
+                disparity = disparity_map[y, x] * pixel_pitch
+                if disparity == 0:
+                    X = x
+                    Y = y
+                    Z = np.inf
+                else:
+                    X = baseline_length * (x-Cx) *  pixel_pitch / disparity
+                    Y = baseline_length * (y-Cy) *  pixel_pitch
+                    Z = (baseline_length * focal_length) / disparity
+                point_list.append([X, Y, Z])
+
+        point_3d = np.array([pnt for pnt in point_list if pnt[2] < np.inf])
+        return point_3d
 #endregion
 
-#     print('general case: not completed')
+    print('general case: undistortion not included')
 
-#     Cx, Cy = None, None
-#     f = None
-#     a, b = None, None
+    Cx, Cy = None, None
+    f = None
+    a, b = None, None
 
-#     Cx, Cy = disparity_map.shape[1]/2, disparity_map.shape[0]/2
+    Cx, Cy = disparity_map.shape[1]/2, disparity_map.shape[0]/2
 
-#     f = focal_length
-#     Tx = baseline_length
-#     Cx_prime = Cx # https://stackoverrun.com/ko/q/7515441 # rectification?
-#     # Cx_prime = Cx - pixel_pitch
+    f = focal_length / pixel_pitch
+    Tx = baseline_length / pixel_pitch
+    Cx_prime = Cx # https://stackoverrun.com/ko/q/7515441 # rectification?
 
-#     a, b = -1 / Tx, (Cx - Cx_prime) / Tx
+    a, b = -1 / Tx, (Cx - Cx_prime) / Tx
 
-#     Q = np.zeros((4,4))
-#     Q[0, 0] = Q[1, 1] = 1
-#     Q[0, 3] = -Cx
-#     Q[1, 3] = -Cy
-#     Q[2, 3] = f
-#     Q[3, 2] = a
-#     Q[3, 3] = b
+    Q = np.zeros((4, 4))
+    Q[0, 0] = Q[1, 1] = 1
+    Q[0, 3] = -Cx
+    Q[1, 3] = -Cy
+    Q[2, 3] = f
+    Q[3, 2] = a
+    Q[3, 3] = b
 
-#     # height, width = disparity_map.shape
-#     # tmp = np.zeros(disparity_map.shape + (3,))
-#     # for y in range(height):
-#     #     for x in range(width):
-#     #         disp = disparity_map[y, x]
-#     #         if disp == 0:
-#     #             disp = 0.001
-#     #         d = baseline_length
-#     #         tmp[y, x][0] = d*x / disp
-#     #         tmp[y, x][1] = y
-#     #         tmp[y, x][2] = d*f / disp
-#     # return tmp.reshape(-1,3)
-
-#     Q_ = np.float32([[1,0,0,-Cx],
-#                 [0,-1,0,Cy],
-#                 [0,0,0,-focal_length],
-#                 [0,0,1,0]])
+    # https://answers.opencv.org/question/4379/from-3d-point-cloud-to-disparity-map/
+    pixel_matrix = np.ones((np.prod(disparity_map.shape),) + (4,))
+    height, width = disparity_map.shape
+    for y in range(height):
+        for x in range(width):
+            Ix, Iy = x, y
+            d = disparity_map[y, x]
+            idx = y*width + x
+            pixel_matrix[idx][0] = Ix
+            pixel_matrix[idx][1] = Iy
+            pixel_matrix[idx][2] = d
     
-#     # https://azerdark.wordpress.com/tag/fujifilm-w3-3d-camera/
-#     Q__ = np.array([1.,0.,0.,-2.8327271270751953e+002,0.,1.,0.,-1.5946473121643066e+002,
-#             0.,0.,0.,1.0546290540664800e+003,0.,0.,-2.3597727835463600e-001,
-#             -1.7014427703509563e+000]).reshape(4,4)
+    xyzw = pixel_matrix@Q.T # (Q@image_matrix.T).T
 
-#     # https://answers.opencv.org/question/4379/from-3d-point-cloud-to-disparity-map/
-#     image_matrix = np.ones((np.prod(disparity_map.shape),) + (4,))
-#     height, width = disparity_map.shape
-#     for y in range(height):
-#         for x in range(width):
-#             Ix, Iy = x, y
-#             d = disparity_map[y, x]
-#             idx = y*width + x
-#             image_matrix[idx][0] = Ix
-#             image_matrix[idx][1] = Iy
-#             image_matrix[idx][2] = d
-    
-#     estimation = image_matrix@Q.T # (Q@image_matrix.T).T
-#     # es = cv2.reprojectImageTo3D(disparity_map, Q)
+    filtered_xyzw = xyzw[xyzw[:, 3] != 0]
 
-#     w_axis = estimation[:, [3]]
-#     w_axis[w_axis==0] = 0.5
-#     estimation[:, [3]] = w_axis
+    point_3d = filtered_xyzw[:, :3] / filtered_xyzw[:, [3]] # x/w, y/w, z/w
+    point_3d *= pixel_pitch # px to mm
 
-#     estimation_3d = estimation[:,:3] / estimation[:, [3]] # x/w, y/w, z/w
+#region reconstruction: point_cloude to disparity_map
+    # recon = []
+    # for pnt in point_3d:
+    #     X_, Y_, Z_ = pnt / pixel_pitch # mm to px
+    #     d = (f - Z_ * b) / (Z_ * a)
+    #     Ix = X_ * (d * a + b) + Cx
+    #     Iy = Y_  * (d * a + b) + Cy
+    #     recon.append([Ix, Iy, d])
+    # recon = np.array(recon)
 
-# #region reconstruction
-#     recon = []
-#     for pnt in estimation_3d:
-#         X_, Y_, Z_ = pnt
-#         d = (f - Z_ * b) / (Z_ * a)
-#         Ix = X_ * (d * a + b) + Cx
-#         Iy = Y_  * (d * a + b) + Cy
-#         recon.append([Ix, Iy, d])
-#     recon = np.array(recon)
+    # recon_disparity_map = np.zeros(disparity_map.shape)
+    # for info in recon:
+    #     x, y, d = info
+    #     x, y = x.round().astype(int), y.round().astype(int)
+    #     recon_disparity_map[y, x] = d
+#endregion
 
-#     recon_disparity_map = np.zeros(disparity_map.shape)
-#     for info in recon:
-#         x, y, d = info
-#         x, y = x.round().astype(int), y.round().astype(int)
-#         recon_disparity_map[y, x] = d
-# #endregion
-
-#     from IPython import embed;embed()
-
-#     return estimation_3d
+    return point_3d
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
@@ -231,8 +204,6 @@ if __name__ == '__main__':
     #     color = im_left_color[y, x]
     #     colored_vertex.append(np.concatenate([vertex, color]))
     # colored_vertex = np.array(colored_vertex)
-
-    from IPython import embed;embed()
 
     from wavefront import Wavefront
     obj = Wavefront()
