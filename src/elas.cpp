@@ -110,26 +110,26 @@ void Elas::process (uint8_t* I1_,uint8_t* I2_,float* D1,float* D2,const int32_t*
 #ifdef PROFILE
   timer.start("Remove Small Segments");
 #endif
-  if (!param.postprocess_left)
+  if (param.postprocess_left)
     removeSmallSegments(D1);
-  if (!param.postprocess_right)
+  if (param.postprocess_right)
     removeSmallSegments(D2);
 
 #ifdef PROFILE
   timer.start("Gap Interpolation");
 #endif
-  if (!param.postprocess_left)
+  if (param.postprocess_left)
   gapInterpolation(D1);
-  if (!param.postprocess_right)
+  if (param.postprocess_right)
     gapInterpolation(D2);
 
   if (param.filter_adaptive_mean) {
 #ifdef PROFILE
     timer.start("Adaptive Mean");
 #endif
-    if (!param.postprocess_left)
+    if (param.postprocess_left)
       adaptiveMean(D1);
-    if (!param.postprocess_right)
+    if (param.postprocess_right)
       adaptiveMean(D2);
   }
 
@@ -137,9 +137,9 @@ void Elas::process (uint8_t* I1_,uint8_t* I2_,float* D1,float* D2,const int32_t*
 #ifdef PROFILE
     timer.start("Median");
 #endif
-    if (!param.postprocess_left)
+    if (param.postprocess_left)
       median(D1);
-    if (!param.postprocess_right)
+    if (param.postprocess_right)
       median(D2);
   }
 
