@@ -78,7 +78,9 @@ public:
     int32_t ipol_gap_width;         // interpolate small gaps (left<->right, top<->bottom)
     bool    filter_median;          // optional median filter (approximated)
     bool    filter_adaptive_mean;   // optional adaptive mean filter (approximated)
-    bool    postprocess_only_left;  // saves time by not postprocessing the right image
+    // bool    postprocess_only_left;  // saves time by not postprocessing the right image
+    bool    postprocess_left;
+    bool    postprocess_right;
     bool    subsampling;            // saves time by only computing disparities for each 2nd pixel
                                     // note: for this option D1 and D2 must be passed with size
                                     //       width/2 x height/2 (rounded towards zero)
@@ -111,7 +113,9 @@ public:
         ipol_gap_width        = 3;
         filter_median         = 0;
         filter_adaptive_mean  = 1;
-        postprocess_only_left = 1;
+        // postprocess_only_left = 1;
+        postprocess_left = 1;
+        postprocess_right = 0;
         subsampling           = 0;
         
       // default settings for middlebury benchmark
@@ -138,7 +142,9 @@ public:
         ipol_gap_width        = 5000;
         filter_median         = 1;
         filter_adaptive_mean  = 0;
-        postprocess_only_left = 0;
+        // postprocess_only_left = 0;
+        postprocess_left = 0;
+        postprocess_right = 0;
         subsampling           = 0;
       }
     }
